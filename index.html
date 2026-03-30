@@ -800,10 +800,25 @@ async function startGen(){
     addLog('run',`⏳ [유형 ${t.id}] ${t.name}${diff?' ('+diff+')':''}...`);
     try{
       const raw=await callClaude(key, t.prompt(diff,passage));
-      allData[t.id]=JSON.parse(raw);
+      let parsed;
+      try{ parsed=JSON.parse(raw); }
+      catch(je){
+        addLog('warn',`⚠️ [유형 ${t.id}] JSON 파싱 실패, 재시도 중...`);
+        // 재시도: 더 짧은 응답 요청
+        const raw2=await callClaude(key, t.prompt(diff,passage)+'
+
+중요: 반드시 유효한 JSON만 출력하고 응답을 간결하게 줄여라.');
+        parsed=JSON.parse(raw2);
+      }
+      allData[t.id]=parsed;
       card.classList.remove('busy'); card.classList.add('done'); document.getElementById(`ck${t.id}`).textContent='✓';
       addLog('ok',`✅ [유형 ${t.id}] 완료`);
-    }catch(e){ card.classList.remove('busy'); addLog('err',`❌ [유형 ${t.id}] 오류: ${e.message}`); allData[t.id]=null; }
+    }catch(e){
+      card.classList.remove('busy');
+      addLog('err',`❌ [유형 ${t.id}] 오류: ${e.message}`);
+      addLog('info',`💡 유형 ${t.id}는 건너뛰고 계속 진행합니다.`);
+      allData[t.id]=null;
+    }
   }
 
   setP(95,'문서 생성 중...');
@@ -824,15 +839,43 @@ async function startGen(){
 // ──────────────────────────────────────────────
 // CLAUDE API
 // ──────────────────────────────────────────────
-async function callClaude(key, prompt){
+async function callClaude(key, prompt, retry=0){
   const r=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4096,messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8192,messages:[{role:'user',content:prompt}]})
   });
   if(!r.ok){ const e=await r.json(); throw new Error(e.error?.message||`HTTP ${r.status}`); }
-  const d=await r.json(), txt=d.content.map(c=>c.text||'').join('');
-  return txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  const d=await r.json();
+  // stop_reason 체크: max_tokens에 걸렸으면 경고
+  if(d.stop_reason==='max_tokens') addLog('warn','⚠️ 응답이 잘렸습니다. JSON 복구 시도 중...');
+  const txt=d.content.map(c=>c.text||'').join('');
+  return repairJson(txt.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+}
+
+// JSON이 중간에 잘린 경우 복구 시도
+function repairJson(raw){
+  // 정상 파싱이면 바로 반환
+  try{ JSON.parse(raw); return raw; } catch(e){}
+
+  let s = raw;
+  // 마지막 완전한 객체까지만 남기고 배열/객체 닫기
+  // 열린 괄호 수 세기
+  let depth=0, lastGood=0;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(c==='{' || c==='[') depth++;
+    else if(c==='}' || c===']'){ depth--; if(depth===0) lastGood=i; }
+  }
+  // depth > 0 이면 잘린 것 → 마지막 완전한 위치까지 자르고 닫기
+  if(depth>0 && lastGood>0){
+    s = s.slice(0, lastGood+1);
+    // 마지막 불완전한 항목(쉼표로 끝나는 것) 제거
+    s = s.replace(/,\s*([}\]])/g, '$1');
+    try{ JSON.parse(s); return s; } catch(e){}
+  }
+  // 그래도 안되면 원본 반환 (호출부에서 에러 처리)
+  return raw;
 }
 
 // ──────────────────────────────────────────────
