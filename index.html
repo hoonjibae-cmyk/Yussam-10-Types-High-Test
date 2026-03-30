@@ -588,7 +588,9 @@ function loadSavedApiKey(){
   const saved = localStorage.getItem(API_STORAGE_KEY);
   if(saved){
     document.getElementById('apiKey').value = saved;
-    checkApi();
+    // checkApi는 나중에 정의되므로 typeof로 안전하게 호출
+    if(typeof checkApi === 'function') checkApi();
+    else { const s=document.getElementById('apiStatus'); if(s) s.textContent='API 연결됨'; }
     updateKeySaveUI(true);
   } else {
     updateKeySaveUI(false);
@@ -599,7 +601,7 @@ function clearSavedKey(){
   if(!confirm('저장된 API 키를 삭제할까요?')) return;
   localStorage.removeItem(API_STORAGE_KEY);
   document.getElementById('apiKey').value='';
-  checkApi();
+  if(typeof checkApi === 'function') checkApi();
   updateKeySaveUI(false);
 }
 
@@ -681,7 +683,7 @@ TYPES.forEach(t => { if(t.hasDiff) diffs[t.id] = t.diffOptions[0]; });
 // ──────────────────────────────────────────────
 // INIT
 // ──────────────────────────────────────────────
-(function(){
+window.addEventListener('DOMContentLoaded', function(){
   checkSession();
   renderGrid();
   document.getElementById('cvDate').value = new Date().toLocaleDateString('ko-KR').replace(/\. /g,'.').replace('.','').slice(0,-1)||new Date().toISOString().slice(0,10);
@@ -689,7 +691,7 @@ TYPES.forEach(t => { if(t.hasDiff) diffs[t.id] = t.diffOptions[0]; });
   dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
   dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0]) procFile(e.dataTransfer.files[0]);});
-})();
+});
 
 function renderGrid(){
   document.getElementById('typeGrid').innerHTML = TYPES.map(t=>{
