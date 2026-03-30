@@ -543,41 +543,44 @@ textarea { resize: vertical; min-height: 150px; font-family: 'DM Mono', monospac
 
 <script>
 // ──────────────────────────────────────────────
-// LOCK SCREEN — 비밀번호 + localStorage
+// 상수
 // ──────────────────────────────────────────────
-// ★ 비밀번호를 변경하려면 아래 LOCK_PW 값만 바꾸세요
-const LOCK_PW = 'mokdong2026';
+// ★ 비밀번호 변경은 아래 한 줄만 수정하세요
+const LOCK_PW         = 'mokdong2026';
 const LOCK_SESSION_KEY = 'mokdong_unlocked';
 const API_STORAGE_KEY  = 'mokdong_apikey';
 
+// ──────────────────────────────────────────────
+// 잠금화면 함수
+// ──────────────────────────────────────────────
 function tryUnlock(){
-  const pw = document.getElementById('lockPw').value;
+  const pw  = document.getElementById('lockPw').value;
   const err = document.getElementById('lockErr');
   if(pw === LOCK_PW){
     sessionStorage.setItem(LOCK_SESSION_KEY,'1');
     document.getElementById('lockScreen').style.display='none';
-    loadSavedApiKey();
     document.getElementById('lockPw').value='';
+    loadSavedApiKey();
   } else {
     err.textContent = '비밀번호가 올바르지 않습니다.';
     document.getElementById('lockPw').value='';
     document.getElementById('lockPw').focus();
-    setTimeout(()=>err.textContent='', 2500);
+    setTimeout(()=>{ err.textContent=''; }, 2500);
   }
 }
 
-function checkSession(){
-  if(sessionStorage.getItem(LOCK_SESSION_KEY)==='1'){
-    document.getElementById('lockScreen').style.display='none';
-    loadSavedApiKey();
-  } else {
-    setTimeout(()=>document.getElementById('lockPw').focus(), 100);
-  }
+function doLogout(){
+  sessionStorage.removeItem(LOCK_SESSION_KEY);
+  const ls = document.getElementById('lockScreen');
+  ls.style.display='flex';
+  setTimeout(()=>{ document.getElementById('lockPw').focus(); }, 100);
 }
 
-// localStorage API 키 저장/불러오기
+// ──────────────────────────────────────────────
+// API 키 저장/불러오기
+// ──────────────────────────────────────────────
 function saveApiKey(){
-  const key = getKey();
+  const key = document.getElementById('apiKey').value.trim();
   if(!key){ alert('API 키를 먼저 입력하세요.'); return; }
   localStorage.setItem(API_STORAGE_KEY, key);
   updateKeySaveUI(true);
@@ -588,9 +591,7 @@ function loadSavedApiKey(){
   const saved = localStorage.getItem(API_STORAGE_KEY);
   if(saved){
     document.getElementById('apiKey').value = saved;
-    // checkApi는 나중에 정의되므로 typeof로 안전하게 호출
-    if(typeof checkApi === 'function') checkApi();
-    else { const s=document.getElementById('apiStatus'); if(s) s.textContent='API 연결됨'; }
+    updateApiStatus(true);
     updateKeySaveUI(true);
   } else {
     updateKeySaveUI(false);
@@ -601,13 +602,14 @@ function clearSavedKey(){
   if(!confirm('저장된 API 키를 삭제할까요?')) return;
   localStorage.removeItem(API_STORAGE_KEY);
   document.getElementById('apiKey').value='';
-  if(typeof checkApi === 'function') checkApi();
+  updateApiStatus(false);
   updateKeySaveUI(false);
 }
 
 function updateKeySaveUI(isSaved){
-  const badge = document.getElementById('keySaveBadge');
+  const badge    = document.getElementById('keySaveBadge');
   const clearBtn = document.getElementById('keyClearBtn');
+  if(!badge) return;
   if(isSaved){
     badge.textContent='✓ 저장됨';
     badge.className='key-save-badge saved';
@@ -619,37 +621,38 @@ function updateKeySaveUI(isSaved){
   }
 }
 
+function updateApiStatus(connected){
+  const el = document.getElementById('apiStatus');
+  if(el) el.textContent = connected ? 'API 연결됨' : 'API 미연결';
+}
+
 function onApiKeyInput(){
-  checkApi();
-  // 입력값이 저장된 값과 다르면 미저장 표시
+  const cur   = document.getElementById('apiKey').value.trim();
   const saved = localStorage.getItem(API_STORAGE_KEY);
-  const cur   = getKey();
-  if(saved && saved === cur) updateKeySaveUI(true);
+  updateApiStatus(!!cur);
+  if(saved && saved===cur) updateKeySaveUI(true);
   else if(cur) updateKeySaveUI(false);
 }
 
-function doLogout(){
-  sessionStorage.removeItem(LOCK_SESSION_KEY);
-  document.getElementById('lockScreen').style.display='flex';
-  setTimeout(()=>document.getElementById('lockPw').focus(), 100);
+function checkApi(){
+  const cur = document.getElementById('apiKey').value.trim();
+  updateApiStatus(!!cur);
 }
 
 function showSaveToast(){
   const t = document.createElement('div');
   t.textContent = '✅ API 키가 이 브라우저에 저장되었습니다';
-  Object.assign(t.style, {
-    position:'fixed', bottom:'24px', left:'50%', transform:'translateX(-50%)',
-    background:'var(--navy3)', border:'1px solid var(--gold-border)',
-    color:'var(--gold2)', padding:'10px 20px', borderRadius:'8px',
-    fontSize:'13px', fontWeight:'600', zIndex:'9998',
-    boxShadow:'0 4px 20px rgba(0,0,0,0.4)', transition:'opacity 0.4s'
+  Object.assign(t.style,{
+    position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',
+    background:'var(--navy3)',border:'1px solid var(--gold-border)',
+    color:'var(--gold2)',padding:'10px 20px',borderRadius:'8px',
+    fontSize:'13px',fontWeight:'600',zIndex:'9998',
+    boxShadow:'0 4px 20px rgba(0,0,0,0.4)',transition:'opacity 0.4s'
   });
   document.body.appendChild(t);
-  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2200);
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),400); },2200);
 }
 
-// ──────────────────────────────────────────────
-// TYPES
 // ──────────────────────────────────────────────
 const TYPES = [
   { id:1, name:"주요 단어 추출", emoji:"📋", desc:"문단별 핵심 어휘 20개+ 표", hasDiff:false,
@@ -680,8 +683,6 @@ const TYPES = [
 let sel = new Set(), diffs = {}, fmt = 'word', files = [], running = false, pTab = 'text';
 TYPES.forEach(t => { if(t.hasDiff) diffs[t.id] = t.diffOptions[0]; });
 
-// ──────────────────────────────────────────────
-// INIT
 // ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function(){
   checkSession();
@@ -1130,6 +1131,7 @@ function renderFiles(){
   });
 }
 function dlAll(){ files.forEach((f,i)=>setTimeout(()=>{ const a=document.createElement('a'); a.href=f.url; a.download=f.name; a.click(); },i*400)); }
+
 </script>
 </body>
 </html>
